@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         SPARROW APAR Assistant v9.8
+// @name         parFillDraftSave
 // @namespace    http://tampermonkey.net/
-// @version      9.8
+// @version      1.1
 // @description  Auto Fill, Save Draft & Loop Automation with Hotkeys (1: Start, 2: Stop)
 // @author       Hardev Singh
 // @match        *://sparrowdelhipolice.saccess.nic.in/*
