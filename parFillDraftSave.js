@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         parFillDraftSave
 // @namespace    http://tampermonkey.net/
-// @version      1.1
+// @version      1.2
 // @description  Auto Fill, Save Draft & Loop Automation with Hotkeys (1: Start, 2: Stop)
 // @author       Hardev Singh
 // @match        *://sparrowdelhipolice.saccess.nic.in/*
@@ -11,6 +11,8 @@
 // @run-at       document-idle
 // @allFrames    true
 // @grant        none
+// @updateURL    https://raw.githubusercontent.com/hardCool/aparFillDscSign/main/parFillDraftSave.js
+// @downloadURL  https://raw.githubusercontent.com/hardCool/aparFillDscSign/main/parFillDraftSave.js
 // ==/UserScript==
 
 (function () {
