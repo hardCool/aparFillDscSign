@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         aparFillingDscSign
 // @namespace    http://tampermonkey.net/
-// @version      19.6-DP-AUTODSC-FIXED
+// @version      19.7-DP-AUTODSC-FIXED
 // @author       hardCool
 // @description  SPARROW APAR filling and DSC signing assistant
 // @match        *://sparrowdelhipolice.saccess.nic.in/*
@@ -11,8 +11,8 @@
 // @allFrames    true
 // @grant        none
 //
-// @updateURL    https://raw.githubusercontent.com/hardCool/aparFillDscSign/main/aparFillingDscSign.user.js
-// @downloadURL  https://raw.githubusercontent.com/hardCool/aparFillDscSign/main/aparFillingDscSign.user.js
+// @updateURL    https://raw.githubusercontent.com/hardCool/aparFillDscSign/main/aparFillingDscSign.js
+// @downloadURL  https://raw.githubusercontent.com/hardCool/aparFillDscSign/main/aparFillingDscSign.js
 // ==/UserScript==
 
 
@@ -31,6 +31,11 @@
                 return true;
             };
 
+            const promptNoop = function (message, defaultValue) {
+                console.log(`[SPARROW POPUP BYPASS] Suppressed prompt: "${message}"`);
+                return defaultValue || "";
+            };
+
             // Lock properties to prevent SPARROW/DSC scripts from re-binding alert
             try {
                 Object.defineProperty(targetWindow, 'alert', {
@@ -43,9 +48,15 @@
                     set: () => {},
                     configurable: true
                 });
+                Object.defineProperty(targetWindow, 'prompt', {
+                    get: () => promptNoop,
+                    set: () => {},
+                    configurable: true
+                });
             } catch (e) {
                 targetWindow.alert = noop;
                 targetWindow.confirm = noop;
+                targetWindow.prompt = promptNoop;
             }
 
             targetWindow.__sparrow_native_locked = true;
@@ -72,23 +83,38 @@
         }
     });
 
-    if (document.documentElement) {
-        iframeObserver.observe(document.documentElement, { childList: true, subtree: true });
+    function observeIframes() {
+        if (document.documentElement) {
+            iframeObserver.observe(document.documentElement, { childList: true, subtree: true });
+        }
     }
+
+    observeIframes();
+    window.addEventListener("DOMContentLoaded", observeIframes, { once: true });
 
     // Continuous scanner to click non-native/HTML modal OK buttons
     setInterval(() => {
         if (!isAutoRunning()) return;
 
-        const modalOkBtns = Array.from(document.querySelectorAll('button, input[type="button"], input[type="submit"], a, div[role="button"]')).filter(el => {
+        scanForModalButtons(document);
+    }, 200);
+
+    function scanForModalButtons(currentDocument) {
+        const modalOkBtns = Array.from(currentDocument.querySelectorAll('button, input[type="button"], input[type="submit"], a, div[role="button"]')).filter(el => {
             const txt = (el.value || el.innerText || '').trim().toUpperCase();
-            return (txt === 'OK' || txt === 'ACCEPT' || txt === 'CONTINUE' || txt === 'CLOSE') && el.offsetWidth > 0;
+            return (txt === 'OK' || txt === 'ACCEPT' || txt === 'CONTINUE' || txt === 'CLOSE') && el.offsetWidth > 0 && el.offsetHeight > 0;
         });
 
-        modalOkBtns.forEach(btn => {
-            btn.click();
+        modalOkBtns.forEach(btn => btn.click());
+
+        currentDocument.querySelectorAll('iframe').forEach(frame => {
+            try {
+                if (frame.contentDocument) scanForModalButtons(frame.contentDocument);
+            } catch (e) {
+                // Cross-origin frames cannot be inspected from this userscript.
+            }
         });
-    }, 200);
+    }
 
     /************************************************
      * STATE MANAGEMENT & AUTOMATED POPUP INTERCEPTOR
