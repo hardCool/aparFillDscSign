@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         parFillDraftSave
 // @namespace    http://tampermonkey.net/
-// @version      1.2
+// @version      1.3
 // @description  Auto Fill, Save Draft & Loop Automation with Hotkeys (1: Start, 2: Stop)
 // @author       Hardev Singh
 // @match        *://sparrowdelhipolice.saccess.nic.in/*
@@ -73,6 +73,21 @@ function isAutoRunEnabled() {
 function setAutoRun(enabled) {
     sessionStorage.setItem("SPARROW_AUTO_RUN", enabled ? "true" : "false");
     console.log(`SPARROW Assistant: Auto-run status set to [${enabled ? "ENABLED" : "STOPPED"}]`);
+    updateRunStatus(enabled ? "RUNNING - Press 2 to stop" : "STOPPED - Press 1 to start", enabled);
+}
+
+function updateRunStatus(message, isRunning) {
+    let status = document.getElementById("sparrow-run-status");
+    if (!status && document.body) {
+        status = document.createElement("div");
+        status.id = "sparrow-run-status";
+        status.style.cssText = "position:fixed;top:10px;right:10px;z-index:2147483647;padding:8px 12px;border:2px solid;font:600 13px Arial,sans-serif;background:#fff;color:#222;";
+        document.body.appendChild(status);
+    }
+    if (status) {
+        status.textContent = message;
+        status.style.borderColor = isRunning ? "#198754" : "#dc3545";
+    }
 }
 
 /************************************************
@@ -81,15 +96,19 @@ function setAutoRun(enabled) {
 
 window.addEventListener("keydown", function (e) {
     // Ignore key presses inside text inputs or textareas
-    if (["INPUT", "TEXTAREA"].includes(document.activeElement.tagName)) return;
+    const activeElement = document.activeElement;
+    if (activeElement && ["INPUT", "TEXTAREA"].includes(activeElement.tagName)) return;
 
     if (e.key === "1") {
+        e.preventDefault();
         console.log("SPARROW Assistant: Hotkey '1' pressed -> STARTING script execution...");
         setAutoRun(true);
         startPoller();
     } else if (e.key === "2") {
+        e.preventDefault();
         console.log("SPARROW Assistant: Hotkey '2' pressed -> STOPPING script execution...");
         setAutoRun(false);
+        stopPoller();
         if (window.__SPARROW_NEXT_TIMEOUT__) {
             clearTimeout(window.__SPARROW_NEXT_TIMEOUT__);
         }
@@ -591,24 +610,34 @@ function detectAuthority(){
 function startPoller() {
     if (!isAutoRunEnabled()) return;
 
+    stopPoller();
+
     let attempts = 0;
     const maxAttempts = 20;
 
-    const interval = setInterval(() => {
+    window.__SPARROW_POLLER__ = setInterval(() => {
         attempts++;
         if (!isAutoRunEnabled()) {
-            clearInterval(interval);
+            stopPoller();
             return;
         }
         const success = detectAuthority();
 
         if (success || attempts >= maxAttempts) {
-            clearInterval(interval);
+            stopPoller();
         }
     }, 500);
 }
 
+function stopPoller() {
+    if (window.__SPARROW_POLLER__) {
+        clearInterval(window.__SPARROW_POLLER__);
+        window.__SPARROW_POLLER__ = null;
+    }
+}
+
 if (document.readyState === "complete" || document.readyState === "interactive") {
+    updateRunStatus(isAutoRunEnabled() ? "RUNNING - Press 2 to stop" : "STOPPED - Press 1 to start", isAutoRunEnabled());
     startPoller();
 } else {
     window.addEventListener("DOMContentLoaded", startPoller);
