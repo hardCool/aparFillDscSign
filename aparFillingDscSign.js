@@ -199,7 +199,7 @@
         `;
         hud.innerHTML = `
             <div style="font-size: 10px; opacity: 0.8; margin-bottom: 2px;">SPARROW AUTOMATION CONTROLLER</div>
-            <div id="sparrow-status-text">Press "1" to START Continuous Run | "2" to STOP</div>
+            <div id="sparrow-status-text">Press "1" START | "2" STOP | "3" RESET</div>
         `;
         document.body.appendChild(hud);
     }
@@ -228,26 +228,36 @@
     });
 
     /************************************************
-     * SKIPPED ROW INDEX TRACKER UTILITIES
+     * SKIPPED PAR TRACKER UTILITIES (ID-BASED)
      ************************************************/
-    function getSkippedIndices() {
+    function getSkippedPARs() {
         try {
-            return JSON.parse(sessionStorage.getItem("SPARROW_SKIPPED_INDICES") || "[]");
+            return JSON.parse(sessionStorage.getItem("SPARROW_SKIPPED_PARS") || "{}");
         } catch (e) {
-            return [];
+            return {};
         }
     }
 
+    function getPARIdentifier(link) {
+        // Extract unique PAR identifier from the link text or row
+        if (!link) return null;
+        const identifier = (link.innerText || link.textContent || "").trim();
+        return identifier || null;
+    }
+
+    function markPARAsSkipped(parId) {
+        if (!parId) return;
+        let skipped = getSkippedPARs();
+        skipped[parId] = true;
+        sessionStorage.setItem("SPARROW_SKIPPED_PARS", JSON.stringify(skipped));
+        logDOM("PAR_SKIP_RECORDED", `PAR '${parId}' marked as processed.`);
+    }
+
     function recordCurrentActiveIndex() {
-        let activeIdx = sessionStorage.getItem("SPARROW_ACTIVE_ROW_INDEX");
-        if (activeIdx !== null) {
-            let skipped = getSkippedIndices();
-            let idxNum = parseInt(activeIdx, 10);
-            if (!skipped.includes(idxNum)) {
-                skipped.push(idxNum);
-                sessionStorage.setItem("SPARROW_SKIPPED_INDICES", JSON.stringify(skipped));
-                logDOM("SKIP_RECORDED", `Row Index #${idxNum} added to skipped history.`);
-            }
+        let activeLink = sessionStorage.getItem("SPARROW_ACTIVE_PAR_LINK");
+        if (activeLink) {
+            markPARAsSkipped(activeLink);
+            sessionStorage.removeItem("SPARROW_ACTIVE_PAR_LINK");
         }
     }
 
@@ -632,32 +642,45 @@
                 return;
             }
 
-            const skippedIndices = getSkippedIndices();
+            const skippedPARs = getSkippedPARs();
             const rows = Array.from(document.querySelectorAll("#dataGrid tbody tr, #dataGridForStage tbody tr"));
             let selectedLink = null;
             let selectedRowIndex = -1;
+            let selectedPARId = null;
 
             for (let i = 0; i < rows.length; i++) {
-                if (skippedIndices.includes(i)) continue;
-
                 const link = rows[i].querySelector("a[onclick*='doInboxRedirect']") || rows[i].querySelector("td a");
                 if (link) {
+                    const parId = getPARIdentifier(link);
+                    // Skip only if this specific PAR ID has been processed before
+                    if (parId && skippedPARs[parId]) {
+                        continue;
+                    }
                     selectedLink = link;
                     selectedRowIndex = i;
+                    selectedPARId = parId;
                     break;
                 }
             }
 
-            if (selectedLink && selectedRowIndex !== -1) {
-                sessionStorage.setItem("SPARROW_ACTIVE_ROW_INDEX", selectedRowIndex.toString());
-                logDOM("INBOX_OPEN", `Opening Row #${selectedRowIndex + 1} (${selectedLink.innerText.trim()})`);
-                updateHUDStatus(`ACTION: Opening Row #${selectedRowIndex + 1} (${selectedLink.innerText.trim()})...`, "#5cb85c", "#1e4620");
+            if (selectedLink && selectedRowIndex !== -1 && selectedPARId) {
+                sessionStorage.setItem("SPARROW_ACTIVE_PAR_LINK", selectedPARId);
+                logDOM("INBOX_OPEN", `Opening PAR: ${selectedPARId}`);
+                updateHUDStatus(`ACTION: Opening PAR: ${selectedPARId}...`, "#5cb85c", "#1e4620");
                 selectedLink.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 selectedLink.click();
                 scheduleNextStep();
             } else {
-                logDOM("INBOX_IDLE", "All rows skipped or completed.");
-                updateHUDStatus("INBOX IDLE: All available PARs completed/skipped.", "#d9534f", "#4a1010");
+                const totalRows = rows.filter(r => r.querySelector("a[onclick*='doInboxRedirect']") || r.querySelector("td a")).length;
+                const processedPARs = Object.keys(skippedPARs).length;
+                logDOM("INBOX_STATUS", `Total rows with links: ${totalRows}, Processed PARs: ${processedPARs}`);
+                if (totalRows === 0) {
+                    logDOM("INBOX_IDLE", "No clickable rows found in current view.");
+                    updateHUDStatus("INBOX IDLE: No rows found. Check pagination or filters.", "#f0ad4e", "#665c00");
+                } else {
+                    logDOM("INBOX_IDLE", `All ${totalRows} visible rows have been processed.`);
+                    updateHUDStatus(`INBOX IDLE: ${processedPARs} PARs completed. Checking for more...`, "#f0ad4e", "#665c00");
+                }
                 setAutoRunning(false);
             }
             return;
@@ -689,6 +712,13 @@
         logDOM("SYSTEM", "Continuous Automation Halted by User");
     }
 
+    function resetSkippedPARs() {
+        sessionStorage.removeItem("SPARROW_SKIPPED_PARS");
+        sessionStorage.removeItem("SPARROW_ACTIVE_PAR_LINK");
+        logDOM("SYSTEM", "Skipped PARs list has been cleared.");
+        updateHUDStatus("DEBUG: Skipped PARs cleared. Press '1' to restart.", "#0275d8", "#001a4d");
+    }
+
     /************************************************
      * KEYBOARD LISTENERS & INITIALIZATION
      ************************************************/
@@ -700,6 +730,8 @@
             startAutoRunner();
         } else if (e.key === "2" || e.code === "Digit2" || e.code === "Numpad2") {
             stopAutoRunner();
+        } else if (e.key === "3" || e.code === "Digit3" || e.code === "Numpad3") {
+            resetSkippedPARs();
         }
     }, true);
 
